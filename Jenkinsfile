@@ -1,3 +1,4 @@
+
 pipeline {
     agent any
 
@@ -5,7 +6,6 @@ pipeline {
         IMAGE_NAME = 'citrafadillahagung/simple-app'
         REGISTRY = 'https://index.docker.io/v1/'
         REGISTRY_CREDENTIALS = 'dockerhub-credentials'
-        DOCKER_EXE = 'C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe'
     }
 
     stages {
@@ -18,14 +18,27 @@ pipeline {
 
         stage('Check Docker') {
             steps {
-                bat '"%DOCKER_EXE%" --version'
-                bat '"%DOCKER_EXE%" info'
+                script {
+                    if (isUnix()) {
+                        sh 'docker --version'
+                        sh 'docker info'
+                    } else {
+                        bat 'docker --version'
+                        bat 'docker info'
+                    }
+                }
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                bat '"%DOCKER_EXE%" build -t %IMAGE_NAME%:%BUILD_NUMBER% .'
+                script {
+                    if (isUnix()) {
+                        sh 'docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} .'
+                    } else {
+                        bat 'docker build -t %IMAGE_NAME%:%BUILD_NUMBER% .'
+                    }
+                }
                 echo 'Image berhasil dibuat.'
             }
         }
@@ -39,10 +52,27 @@ pipeline {
                         passwordVariable: 'DOCKER_PASS'
                     )
                 ]) {
-                    bat '"%DOCKER_EXE%" login -u "%DOCKER_USER%" -p "%DOCKER_PASS%"'
-                    bat '"%DOCKER_EXE%" push %IMAGE_NAME%:%BUILD_NUMBER%'
-                    bat '"%DOCKER_EXE%" tag %IMAGE_NAME%:%BUILD_NUMBER% %IMAGE_NAME%:latest'
-                    bat '"%DOCKER_EXE%" push %IMAGE_NAME%:latest'
+                    script {
+                        if (isUnix()) {
+                            sh '''
+                                set +x
+                                echo "$DOCKER_PASS" | docker login \
+                                    -u "$DOCKER_USER" --password-stdin
+                                docker push "${IMAGE_NAME}:${BUILD_NUMBER}"
+                                docker tag "${IMAGE_NAME}:${BUILD_NUMBER}" \
+                                    "${IMAGE_NAME}:latest"
+                                docker push "${IMAGE_NAME}:latest"
+                            '''
+                        } else {
+                            bat '''
+                                @echo off
+                                docker login -u "%DOCKER_USER%" --password-stdin
+                                docker push "%IMAGE_NAME%:%BUILD_NUMBER%"
+                                docker tag "%IMAGE_NAME%:%BUILD_NUMBER%" "%IMAGE_NAME%:latest"
+                                docker push "%IMAGE_NAME%:latest"
+                            '''
+                        }
+                    }
                 }
             }
         }
